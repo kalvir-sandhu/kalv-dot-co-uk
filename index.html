@@ -57,53 +57,54 @@
       overflow: hidden;
       background: radial-gradient(circle at 50% 50%, #0d1224 0%, #07080d 75%);
       transition:
-        top 0.75s cubic-bezier(0.22, 1, 0.36, 1),
-        right 0.75s cubic-bezier(0.22, 1, 0.36, 1),
-        width 0.75s cubic-bezier(0.22, 1, 0.36, 1),
-        height 0.75s cubic-bezier(0.22, 1, 0.36, 1),
-        border-radius 0.75s cubic-bezier(0.22, 1, 0.36, 1),
-        box-shadow 0.75s cubic-bezier(0.22, 1, 0.36, 1),
-        border-color 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+        top 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+        right 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+        width 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+        height 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+        border-radius 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+        border-color 0.7s cubic-bezier(0.22, 1, 0.36, 1);
       border: 1px solid transparent;
     }
 
     #visualizer-wrapper.docked {
-      top: 18px;
-      right: 20px;
-      width: 240px;
-      height: 135px;
+      top: 1.15rem;
+      right: 1.25rem;
+      width: 260px;
+      height: 150px;
       border-radius: 16px;
-      z-index: 60;
+      z-index: 1000;
       cursor: pointer;
-      border: 1px solid rgba(56, 189, 248, 0.35);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      background: radial-gradient(circle at 50% 50%, #101730 0%, #07080d 85%);
       box-shadow:
-        0 18px 40px -10px rgba(0, 0, 0, 0.85),
-        0 0 24px rgba(56, 189, 248, 0.18),
-        inset 0 0 20px rgba(168, 85, 247, 0.12);
+        0 18px 40px -10px rgba(0, 0, 0, 0.9),
+        0 0 28px rgba(56, 189, 248, 0.25),
+        inset 0 0 22px rgba(168, 85, 247, 0.16);
     }
 
     #visualizer-wrapper.docked:hover {
-      border-color: rgba(56, 189, 248, 0.75);
+      border-color: rgba(56, 189, 248, 0.85);
       box-shadow:
-        0 20px 45px -10px rgba(0, 0, 0, 0.9),
-        0 0 32px rgba(56, 189, 248, 0.35);
+        0 20px 45px -10px rgba(0, 0, 0, 0.95),
+        0 0 36px rgba(56, 189, 248, 0.42);
       transform: translateY(-2px);
     }
 
     @media (max-width: 640px) {
       #visualizer-wrapper.docked {
-        top: 14px;
-        right: 14px;
-        width: 148px;
-        height: 86px;
+        top: 0.85rem;
+        right: 0.85rem;
+        width: 156px;
+        height: 92px;
         border-radius: 12px;
       }
     }
 
     #three-canvas {
       display: block;
-      width: 100%;
-      height: 100%;
+      width: 100% !important;
+      height: 100% !important;
     }
 
     /* Docked Return Home Badge */
@@ -1604,7 +1605,8 @@
         const rotationSpeed = elapsed * (1.35 + mids * 2.6);
 
         // Particle glow size pulses subtly with bass and treble
-        material.size = 0.22 + bass * 0.14 + treble * 0.08;
+        const isDocked = state.currentView !== 'home';
+        material.size = (isDocked ? 0.34 : 0.22) + bass * 0.15 + treble * 0.08;
         axisMat.opacity = 0.08 + energy * 0.38;
 
         const posAttr = geometry.attributes.position;
@@ -1686,33 +1688,77 @@
         spiralPoints.rotation.x = state.mouseY * 0.14;
         axisLine.rotation.copy(spiralPoints.rotation);
 
-        // Keep renderer dimensions synced with container during CSS PIP transitions
+        // Smoothly interpolate camera framing & horizontal scale between fullscreen and docked PIP
+        const targetCamZ = isDocked ? 22.5 : 14.0;
+        const targetScaleX = isDocked ? 0.72 : 1.0;
+        const targetScaleY = isDocked ? 1.25 : 1.0;
+
+        camera.position.z += (targetCamZ - camera.position.z) * 0.14;
+        spiralPoints.scale.x += (targetScaleX - spiralPoints.scale.x) * 0.14;
+        spiralPoints.scale.y += (targetScaleY - spiralPoints.scale.y) * 0.14;
+        axisLine.scale.copy(spiralPoints.scale);
+
+        // Keep renderer dimensions synced with container every frame
         syncRendererSize();
 
         renderer.render(scene, camera);
       }
 
-      function syncRendererSize() {
-        const rect = visualizerWrapper.getBoundingClientRect();
-        const width = Math.max(1, Math.floor(rect.width));
-        const height = Math.max(1, Math.floor(rect.height));
-        const currentSize = renderer.getSize(new THREE.Vector2());
+      let lastSyncedWidth = 0;
+      let lastSyncedHeight = 0;
 
-        if (currentSize.x !== width || currentSize.y !== height) {
+      function syncRendererSize(force = false) {
+        const rect = visualizerWrapper.getBoundingClientRect();
+        const width = Math.max(1, Math.round(rect.width));
+        const height = Math.max(1, Math.round(rect.height));
+
+        if (force || width !== lastSyncedWidth || height !== lastSyncedHeight) {
+          lastSyncedWidth = width;
+          lastSyncedHeight = height;
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
           renderer.setSize(width, height, false);
           camera.aspect = width / height;
-          // Pull camera slightly back in docked PIP so the entire spiral fits cleanly inside the mini card
-          camera.position.z = state.currentView === 'home' ? 14 : 16.5;
           camera.updateProjectionMatrix();
         }
       }
+
+      // Attach ResizeObserver directly to #visualizer-wrapper for reliable PIP & viewport resizing
+      if (typeof ResizeObserver !== 'undefined') {
+        const vizResizeObserver = new ResizeObserver(() => {
+          syncRendererSize(true);
+          renderer.render(scene, camera);
+        });
+        vizResizeObserver.observe(visualizerWrapper);
+      }
+
+      // Run a dedicated rAF resize sync loop across the 750ms CSS transition window
+      let transitionSyncRaf = null;
+      function triggerTransitionResizeSync(durationMs = 780) {
+        if (transitionSyncRaf) cancelAnimationFrame(transitionSyncRaf);
+        const startTime = performance.now();
+
+        function step(now) {
+          syncRendererSize(true);
+          if (now - startTime < durationMs) {
+            transitionSyncRaf = requestAnimationFrame(step);
+          } else {
+            transitionSyncRaf = null;
+          }
+        }
+        transitionSyncRaf = requestAnimationFrame(step);
+      }
+
+      visualizerWrapper.addEventListener('transitionend', () => {
+        syncRendererSize(true);
+        renderer.render(scene, camera);
+      });
 
       window.addEventListener('pointermove', (e) => {
         state.targetMouseX = (e.clientX / window.innerWidth) * 2 - 1;
         state.targetMouseY = (e.clientY / window.innerHeight) * 2 - 1;
       });
 
-      window.addEventListener('resize', syncRendererSize);
+      window.addEventListener('resize', () => syncRendererSize(true));
 
       // -------------------------------------------------------------------
       // 5. NAVIGATION & SPATIAL TRANSITION (FULLSCREEN <-> TOP-RIGHT PIP)
@@ -1758,6 +1804,9 @@
           }
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
+
+        // Continuously sync WebGL drawing buffer & camera aspect throughout the CSS transition
+        triggerTransitionResizeSync(780);
 
         if (pushHash) {
           const newHash = view === 'home' ? '#home' : `#${view}`;
